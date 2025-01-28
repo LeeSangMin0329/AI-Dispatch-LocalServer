@@ -37,7 +37,7 @@ def get_conversations():
     cursor = db_connect.cursor()
 
     cursor.execute('''
-    SELECT role, message, timestamp FROM conversations
+    SELECT role, message, face, motion, timestamp FROM conversations
     ORDER BY timestamp
                    ''')
     
@@ -48,20 +48,25 @@ def get_conversations():
     gpt_messages = []
 
     for row in conversations:
-        role, message, timestamp = row
-        gpt_messages.append({"role" : role, "content" : f"({timestamp}):" + message})
+        role, message, face, motion, timestamp = row
 
+        if role == "user":
+            gpt_messages.append({"role" : role, "content" : f"user ({timestamp}):" + message})
+        else:
+            gpt_messages.append({"role" : role, "content" : f"{face}|{motion}|{message}"})
+
+    print(f"converstaion length: {len(gpt_messages)}")
     return gpt_messages
 
 def split_message(message: str):
     parts = message.split("|")
 
-    face = None
-    motion = None
-    answer = None
+    face = ""
+    motion = ""
+    answer = ""
 
     if len(parts) < 3:
-        answer = parts[0]
+        answer = parts[-1]
     else:
         face = parts[0]
         motion = parts[1]
