@@ -11,6 +11,7 @@ import prompt_introduction
 from datetime import datetime
 
 app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = 25 * 1024 * 1024
 
 @app.route("/chat", methods=["POST"])
 def receive_text():
@@ -29,11 +30,12 @@ def receive_text():
 
 @app.route("/chat_audio", methods=["POST"])
 def receive_audio():
-    audio = request.form.get("message")
+    audio_file = request.files.get("message")
 
-    decoded_data = base64.b64decode(audio)
-
-    audio_buffer = BytesIO(decoded_data)
+    if not audio_file:
+        return jsonify({"response": ""})
+        
+    audio_buffer = BytesIO(audio_file.read())
 
     user_input = query_stt(audio_buffer, language="ja")
 
