@@ -1,11 +1,9 @@
-import numpy as np
 import io
 import openai
 import time
+from message_utils import postprocess_stt
 from openai_key import API_KEY
-from prompt_introduction import translation_rule_ko_message, translation_rule_ja_message
-
-remove_words = ["ご視聴ありがとうござ", "by", "チョ", "トミ", "お疲れさまでした", "字幕視聴", "コメント欄に書いてあげてね", "咳 ごちそうさまでした", "【", "】", "パチパチパチ"]
+from prompt_introduction import translation_rule_ko_message, translation_rule_ja_message, summary_rule
 
 client = openai.OpenAI(api_key=API_KEY)
 
@@ -13,7 +11,7 @@ def query_gpt(messages: list) -> str:
     start = time.time()
     
     completion = client.chat.completions.create(
-        model="gpt-4o",
+        model="ft:gpt-4o-2024-08-06:personal:yuki:AuyNKEk9",
         messages=messages
         )
     
@@ -41,16 +39,6 @@ def query_stt(audio: io.BytesIO, language="ja") -> str:
     end = time.time()
     print(f"whisper query time : {end - start}")
     return result.strip()
-
-def postprocess_stt(transcription: str) -> str:
-    if len(transcription) < 4:
-        return ""
-
-    for bad_word in remove_words:
-        if bad_word in transcription:
-            return ""
-        
-    return transcription
 
 def translate_ko(message: str):
     prompts = []

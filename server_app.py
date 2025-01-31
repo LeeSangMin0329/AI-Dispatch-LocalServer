@@ -1,5 +1,4 @@
 import requests
-import base64
 from io import BytesIO
 from flask import Flask, request, jsonify
 from message_utils import remove_emoji
@@ -8,6 +7,7 @@ from translate_util import translate_conversation
 
 import db_manager
 import prompt_introduction
+import conversation_manager
 from datetime import datetime
 
 app = Flask(__name__)
@@ -49,9 +49,14 @@ def receive_audio():
     return jsonify({"response": message_jp})
 
 def chat(user_input: str):
-    converstations = db_manager.get_conversations()
-    converstations.insert(0, prompt_introduction.rule_message_jp)
-    converstations.insert(0, prompt_introduction.introduction_message_jp)
+    long_term_conversations = db_manager.get_long_term_conversations()
+    recent_converstations, is_required_summary = db_manager.get_recent_conversations()
+ 
+    converstations = []
+    converstations.append(prompt_introduction.introduction_message_jp)
+    converstations.append(prompt_introduction.rule_message_jp)
+    converstations.extend(long_term_conversations)
+    converstations.extend(recent_converstations)
 
     current_time = datetime.now()
     timestamp = current_time.strftime(f"%Y-%m-%d %H:%M:%S")
@@ -66,12 +71,15 @@ def chat(user_input: str):
     print(response_content)
     print(message_jp)
 
-    db_manager.add_converstaion("user", user_input)
-    db_manager.add_converstaion("assistant", message_jp, face, motion)
+    db_manager.add_recent_converstaion("user", user_input)
+    db_manager.add_recent_converstaion("assistant", message_jp, face, motion)
 
     user_input_ko, message_ko = translate_conversation(user_input, message_jp)
     
     send_to_tts_server(message_jp, face, motion, user_input_ko, message_ko)
+
+    if is_required_summary:
+        conversation_manager.request_summary()
 
     return message_jp
 
@@ -96,6 +104,7 @@ def test_route(message: str):
         response = receive_text()
         print(response.get_json()['response'])  # 응답 출력
 
+db_manager.init()
 app.run(host="127.0.0.1", port="50003")
 
 # def main():
