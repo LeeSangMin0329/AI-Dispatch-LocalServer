@@ -1,7 +1,7 @@
 import requests
 from io import BytesIO
 from flask import Flask, request, jsonify
-from message_utils import remove_emoji
+from message_utils import remove_emoji, split_answer_message
 from openai_controller import query_gpt, query_stt, translate_ja
 from translate_util import translate_conversation
 
@@ -65,7 +65,7 @@ def chat(user_input: str):
 
     response_content = query_gpt(converstations)
     
-    face, motion, answer = db_manager.split_message(response_content)
+    face, motion, answer = split_answer_message(response_content)
     message_jp = remove_emoji(answer)
     
     print(response_content)
@@ -104,7 +104,7 @@ def test_route(message: str):
         response = receive_text()
         print(response.get_json()['response'])  # 응답 출력
 
-db_manager.init()
+conversation_manager.try_request_summary_from_timestamp()
 app.run(host="127.0.0.1", port="50003")
 
 # def main():

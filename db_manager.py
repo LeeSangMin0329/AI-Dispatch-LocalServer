@@ -2,7 +2,6 @@ import sqlite3
 
 DB_FILE_PATH = "sqlite/conversations.db"
 SUMMARY_LENGTH = 100
-RECENT_MESSAGE_COUNT = 50
 RECENT_ARCHIVED_MESSAGE_COUNT = 50
 
 def init():
@@ -43,6 +42,7 @@ def init():
     
     db_connect.close()
 
+# region recent conversations
 def add_recent_converstaion(role: str, message: str, face: str = None, motion: str = None, context: str = None):
     db_connect = sqlite3.connect(DB_FILE_PATH)
     cursor = db_connect.cursor()
@@ -54,26 +54,6 @@ def add_recent_converstaion(role: str, message: str, face: str = None, motion: s
     
     db_connect.commit()
     db_connect.close()
-
-def get_long_term_conversations() -> list:
-    db_connect = sqlite3.connect(DB_FILE_PATH)
-    cursor = db_connect.cursor()
-    cursor.execute(f'''
-        SELECT summary, timestamp
-        FROM summarized_conversation
-        ORDER BY timestamp ASC
-        LIMIT {RECENT_ARCHIVED_MESSAGE_COUNT}
-                   ''')
-    
-    conversations = cursor.fetchall()
-    db_connect.close()
-
-    gpt_messages = []
-
-    for row in conversations:
-        summary, timestamp = row
-        gpt_messages.append({"role" : "assistant", "content" : f"({timestamp}の過去記憶):" + summary})
-    return gpt_messages
 
 def get_recent_conversations() -> tuple[list, bool]:
     db_connect = sqlite3.connect(DB_FILE_PATH)
@@ -98,47 +78,100 @@ def get_recent_conversations() -> tuple[list, bool]:
         else:
             gpt_messages.append({"role" : role, "content" : f"{face}|{motion}|{message}"})
 
-    print(f"{len(conversations)}")
+    print(f"recent conversations length: {len(conversations)}")
     return gpt_messages, (len(conversations) > SUMMARY_LENGTH)
 
-def archive_old_conversations():
-    # conversations 테이블의 최신 문장만 남기고 아카이빙
-
+def get_count_recent_conversations() -> int:
     db_connect = sqlite3.connect(DB_FILE_PATH)
     cursor = db_connect.cursor()
 
     cursor.execute("SELECT COUNT(*) FROM conversations")
-    conversation_count = cursor.fetchone()[0]
+    query_result = cursor.fetchone()
+    conversation_count = query_result[0] if query_result else 0
+    db_connect.close()
 
-    if conversation_count <= RECENT_MESSAGE_COUNT:
-        print(f"conversations table row cound less than {RECENT_MESSAGE_COUNT}. so not work archive.")
-        db_connect.close()
-        return None, None
+    return conversation_count
+
+def get_timestamp_most_recent_conversations():
+    db_connect = sqlite3.connect(DB_FILE_PATH)
+    cursor = db_connect.cursor()
+
+    cursor.execute('''
+        SELECT timestamp
+        FROM conversations
+        ORDER BY timestamp DESC
+        LIMIT 1
+                   ''')
+    query_result = cursor.fetchone()
+    recent_timestamp = query_result[0] if query_result else ""
+    db_connect.close()
+
+    return recent_timestamp
+# endregion
+
+# region summary converstaions
+def get_long_term_conversations() -> list:
+    db_connect = sqlite3.connect(DB_FILE_PATH)
+    cursor = db_connect.cursor()
+    cursor.execute(f'''
+        SELECT summary, timestamp
+        FROM summarized_conversation
+        ORDER BY timestamp ASC
+        LIMIT {RECENT_ARCHIVED_MESSAGE_COUNT}
+                   ''')
+    
+    conversations = cursor.fetchall()
+    db_connect.close()
+
+    gpt_messages = []
+
+    for row in conversations:
+        summary, timestamp = row
+        gpt_messages.append({"role" : "assistant", "content" : f"({timestamp}の過去記憶):" + summary})
+    return gpt_messages
+ 
+def add_summary_conversation(summary_message: str, timestamp: str):
+    db_connect = sqlite3.connect(DB_FILE_PATH)
+    cursor = db_connect.cursor()
+    cursor.execute('''
+        INSERT INTO summarized_conversation (summary, timestamp) VALUES (?, ?)
+        ''', (summary_message, timestamp))
+    db_connect.commit()
+    db_connect.close()
+# endregion
+
+# region archived conversations
+def archive_old_conversations(keep_recent_rows_limit: int):
+    # conversations 테이블의 최신 문장만 남기고 아카이빙
+    db_connect = sqlite3.connect(DB_FILE_PATH)
+    cursor = db_connect.cursor()
 
     cursor.execute("SELECT MAX(id) FROM archived_conversations")
-    previous_max_id = cursor.fetchone()[0] or 0
+    query_result = cursor.fetchone()
+    previous_max_id = query_result[0] if query_result else 0
 
     cursor.execute(f'''
         INSERT INTO archived_conversations SELECT * 
         FROM conversations 
         WHERE id NOT IN (
-            SELECT id FROM conversations ORDER BY timestamp DESC LIMIT {RECENT_MESSAGE_COUNT}
+            SELECT id FROM conversations ORDER BY timestamp DESC LIMIT {keep_recent_rows_limit}
         )''')
 
     db_connect.commit()
     
     cursor.execute("SELECT MAX(id) FROM archived_conversations")
-    end_id = cursor.fetchone()[0] or 0
+    query_result = cursor.fetchone()
+    end_id = query_result[0] if query_result else 0
 
     if previous_max_id == end_id:
-        print("No new conversations to archive.")
+        print(f"id {previous_max_id}: No new conversations to archive.")
         db_connect.close()
-        return
+        return None, None
     
     cursor.execute(f'''
         DELETE FROM conversations  
         WHERE id NOT IN (
-            SELECT id FROM conversations ORDER BY timestamp DESC LIMIT {RECENT_MESSAGE_COUNT}
+            SELECT id FROM conversations ORDER BY timestamp DESC LIMIT {keep_recent_rows_limit}
         )''')
     
     db_connect.commit()
@@ -174,28 +207,4 @@ def get_archived_conversations(start_id, end_id):
     content = ''.join(message_list)
     gpt_messages.append({"role" : "user", "content" : content})
     return gpt_messages, timestamp
-    
-def add_summary_conversation(summary_message: str, timestamp: str):
-    db_connect = sqlite3.connect(DB_FILE_PATH)
-    cursor = db_connect.cursor()
-    cursor.execute('''
-        INSERT INTO summarized_conversation (summary, timestamp) VALUES (?, ?)
-        ''', (summary_message, timestamp))
-    db_connect.commit()
-    db_connect.close()
-    
-def split_message(message: str):
-    parts = message.split("|")
-
-    face = ""
-    motion = ""
-    answer = ""
-
-    if len(parts) < 3:
-        answer = parts[-1]
-    else:
-        face = parts[0]
-        motion = parts[1]
-        answer = parts[2]
-    
-    return face, motion, answer
+# endregion   
