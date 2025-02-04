@@ -1,10 +1,12 @@
 import db_manager
-from prompt_introduction import summary_rule
+from prompt_introduction import summary_rule, random_topic_rule
 from openai_controller import query_gpt
 from datetime import datetime, timedelta
 
 KEEP_RECENT_MESSAGE_COUNT = 50
 COMPARISON_HOURS = 6
+
+message_random_topics = ""
 
 __all__ = ['request_summary', 'try_request_summary_from_timestamp']
 
@@ -62,3 +64,10 @@ def _converting_old_conversation_to_long_term_memory(keep_recent_rows_count: int
     
     print(f"summary {start_id} ~ {end_id} : {result}")
     db_manager.add_summary_conversation(result, timestamp)
+
+def generate_random_topic_converstaion() -> str:
+    gpt_message = []
+    gpt_message.append(random_topic_rule)
+    message_random_topics = query_gpt(gpt_message)
+
+    return message_random_topics

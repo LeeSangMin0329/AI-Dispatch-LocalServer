@@ -1,9 +1,9 @@
 import io
 import openai
 import time
-from message_utils import postprocess_stt
+from message_utils import postprocess_stt, postprocess_llm_answer
 from openai_key import API_KEY
-from prompt_introduction import translation_rule_ko_message, translation_rule_ja_message, summary_rule
+from prompt_introduction import translation_rule_ko_message, translation_rule_ja_message
 
 client = openai.OpenAI(api_key=API_KEY)
 
@@ -11,14 +11,31 @@ def query_gpt(messages: list) -> str:
     start = time.time()
     
     completion = client.chat.completions.create(
-        model="ft:gpt-4o-2024-08-06:personal:yuki:AuyNKEk9",
-        messages=messages
+        model = "ft:gpt-4o-2024-08-06:personal:yuki-multi:AwUHV1ml",
+        messages = messages
         )
     
     end = time.time()
     print(f"llm query time : {end - start}")
+
+    answer = completion.choices[0].message.content
+
+    return postprocess_llm_answer(answer)
+
+def query_gpt_mini(messages: list) -> str:
+    start = time.time()
     
-    return completion.choices[0].message.content
+    completion = client.chat.completions.create(
+        model = "gpt-4o-mini",
+        messages = messages
+        )
+    
+    end = time.time()
+    print(f"llm query time : {end - start}")
+
+    answer = completion.choices[0].message.content
+
+    return answer
     
 def query_stt(audio: io.BytesIO, language="ja") -> str:
     start = time.time()
@@ -38,7 +55,7 @@ def query_stt(audio: io.BytesIO, language="ja") -> str:
 
     end = time.time()
     print(f"whisper query time : {end - start}")
-    return result.strip()
+    return result
 
 def translate_ko(message: str):
     prompts = []
@@ -46,7 +63,7 @@ def translate_ko(message: str):
     prompts.append(translation_rule_ko_message)
     prompts.append({"role" : "user", "content" : message})
 
-    result = query_gpt(prompts)
+    result = query_gpt_mini(prompts)
 
     print(f"translate result: {result}")
     return result
@@ -57,7 +74,7 @@ def translate_ja(message: str) -> str:
     prompts.append(translation_rule_ja_message)
     prompts.append({"role" : "user", "content" : message})
 
-    result = query_gpt(prompts)
+    result = query_gpt_mini(prompts)
 
     print(f"translate result: {result}")
     return result

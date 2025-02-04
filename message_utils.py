@@ -13,11 +13,15 @@ def postprocess_stt(transcription: str) -> str:
     for bad_word in remove_words:
         if bad_word in transcription:
             return ""
-        
-    transcription = remove_emoji(transcription).strip()
+            
+    message = remove_emoji(transcription)
+    return message.strip()
+
+def postprocess_llm_answer(plain_text: str):
+    message = remove_emoji(plain_text).strip()
     
     # 괄호 안의 문자와 : 특수문자 제거.
-    return re.sub(r'\(.*?\)|:', '', transcription)
+    return re.sub(r'（.*?）|[:『』「」]', '', message)
 
 def split_answer_message(message: str):
     parts = message.split("|")
