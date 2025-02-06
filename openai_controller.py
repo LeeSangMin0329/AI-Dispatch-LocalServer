@@ -4,6 +4,9 @@ import time
 from message_utils import postprocess_stt, postprocess_llm_answer
 from openai_key import API_KEY
 from prompt_introduction import translation_rule_ko_message, translation_rule_ja_message
+from screenshot_utils import get_screenshot_to_base64
+
+MODEL_NAME = "ft:gpt-4o-2024-08-06:personal:yuki-multi:AwUHV1ml"
 
 client = openai.OpenAI(api_key=API_KEY)
 
@@ -11,7 +14,7 @@ def query_gpt(messages: list) -> str:
     start = time.time()
     
     completion = client.chat.completions.create(
-        model = "ft:gpt-4o-2024-08-06:personal:yuki-multi:AwUHV1ml",
+        model = MODEL_NAME,
         messages = messages
         )
     
@@ -78,3 +81,27 @@ def translate_ja(message: str) -> str:
 
     print(f"translate result: {result}")
     return result
+
+def quary_with_screenshot(recent_messages: list, screenshot_message: str)-> str:
+    screenshot = get_screenshot_to_base64()
+
+    if not screenshot:
+        print(f"screenshot is empty")
+        return ""
+    
+    recent_messages.append({"role": "user",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": screenshot_message
+                                },
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": f"data:image/png;base64,{screenshot}",
+                                        "detail": "low"
+                                        },
+                                },
+                            ]})
+    
+    return query_gpt(recent_messages)

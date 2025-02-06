@@ -1,7 +1,7 @@
 from openai_controller import translate_ko
 
 def translate_conversation(user_input: str, message_jp: str):
-    return user_input, message_jp
+    # return user_input, message_jp
 
     target_text = f"{user_input}|{message_jp}"
     translate_result = translate_ko(target_text)

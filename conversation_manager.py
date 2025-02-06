@@ -1,14 +1,46 @@
 import db_manager
-from prompt_introduction import summary_rule, random_topic_rule
-from openai_controller import query_gpt
+import prompt_introduction
+from prompt_introduction import summary_rule, random_topic_rule, screenshot_topic_user_content, screenshot_topic_record_user_content
+from openai_controller import query_gpt, quary_with_screenshot
 from datetime import datetime, timedelta
+from message_utils import remove_emoji, split_answer_message
+from translate_util import translate_conversation
+import screenshot_utils
 
 KEEP_RECENT_MESSAGE_COUNT = 50
 COMPARISON_HOURS = 6
 
-message_random_topics = ""
-
 __all__ = ['request_summary', 'try_request_summary_from_timestamp']
+
+def chat(user_input: str):
+    # 과거 대화 기록에 입력을 더해 전송
+    converstations, is_required_summary = get_conversations_prompt()
+
+    current_time = datetime.now()
+    timestamp = current_time.strftime(f"%Y-%m-%d %H:%M:%S")
+    converstations.append({"role" : "system", "content" : f"現在時刻 : {timestamp}"})
+    converstations.append({"role" : "user", "content" : user_input})
+
+    response_content = query_gpt(converstations)
+    
+    message_jp, face, motion, user_input_ko, message_ko = apply_llm_response_content(response_content, user_input)
+
+    return message_jp, face, motion, user_input_ko, message_ko, is_required_summary
+
+def chat_with_screenshot(user_input: str = ""):
+    screenshot_utils.capture_screen()
+    converstations, is_required_summary = get_conversations_prompt()
+
+    recorded_user_input = user_input
+
+    if user_input == "":
+        user_input = screenshot_topic_user_content
+        recorded_user_input = screenshot_topic_record_user_content
+    
+    response_content = quary_with_screenshot(converstations, user_input)
+    message_jp, face, motion, user_input_ko, message_ko = apply_llm_response_content(response_content, recorded_user_input)
+
+    return message_jp, face, motion, user_input_ko, message_ko
 
 def request_summary():
     conversation_count = db_manager.get_count_recent_conversations()
@@ -71,3 +103,29 @@ def generate_random_topic_converstaion() -> str:
     message_random_topics = query_gpt(gpt_message)
 
     return message_random_topics
+
+def get_conversations_prompt():
+    long_term_conversations = db_manager.get_long_term_conversations()
+    recent_converstations, is_required_summary = db_manager.get_recent_conversations()
+ 
+    converstations = []
+    converstations.append(prompt_introduction.introduction_message_jp)
+    converstations.extend(long_term_conversations)
+    converstations.extend(recent_converstations)
+    converstations.append(prompt_introduction.rule_message_jp)
+
+    return converstations, is_required_summary
+
+def apply_llm_response_content(response_content: str, recorded_user_input: str):
+    face, motion, answer = split_answer_message(response_content)
+    message_jp = remove_emoji(answer)
+    
+    print(response_content)
+    print(message_jp)
+
+    db_manager.add_recent_converstaion("user", recorded_user_input)
+    db_manager.add_recent_converstaion("assistant", message_jp, face, motion)
+
+    user_input_ko, message_ko = translate_conversation(recorded_user_input, message_jp)
+    
+    return message_jp, face, motion, user_input_ko, message_ko
