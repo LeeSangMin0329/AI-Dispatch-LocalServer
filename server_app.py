@@ -13,9 +13,12 @@ app.config['MAX_CONTENT_LENGTH'] = 25 * 1024 * 1024
 
 last_request_chat_time = time.time()
 is_suggest_random_topic = False
+is_contain_screenshot = False
 
 @app.route("/chat", methods=["POST"])
 async def receive_text():
+    global is_contain_screenshot
+
     form = await request.form
     user_input = form.get("message")
     required_translate = request.form.get("required_translate")
@@ -26,12 +29,17 @@ async def receive_text():
     if required_translate == "True":
         user_input = translate_ja(user_input)
 
-    message_jp = chat_to_tts_server(user_input)
+    if is_contain_screenshot:
+        message_jp = chat_to_tts_server_with_screenshot(user_input)
+    else:
+        message_jp = chat_to_tts_server(user_input)
 
     return jsonify({"response": message_jp})
 
 @app.route("/chat_audio", methods=["POST"])
 async def receive_audio():
+    global is_contain_screenshot
+
     files = await request.files
     audio_file = files.get("message")
 
@@ -45,15 +53,28 @@ async def receive_audio():
     if not user_input:
         return jsonify({"response": ""}) 
 
-    print(f"user: {user_input}")
-
-    message_jp = chat_to_tts_server(user_input)
+    if is_contain_screenshot:
+        message_jp = chat_to_tts_server_with_screenshot(user_input)
+    else:
+        message_jp = chat_to_tts_server(user_input)
 
     return jsonify({"response": message_jp})
+
+@app.route("/contain_screenshot", methods=["POST"])
+async def contain_screenshot():
+    global is_contain_screenshot
+    json = await request.get_json()
+    is_contain_flag = json.get("is_contain", False)
+    if isinstance(is_contain_flag, bool):
+        is_contain_screenshot = is_contain_flag
+    print(f"change screenshot flag: {is_contain_screenshot}")
+    return jsonify({"response": ""})
 
 def chat_to_tts_server(user_input: str):
     global last_request_chat_time
     global is_suggest_random_topic
+
+    print(f"user: {user_input}")  
 
     message_jp, face, motion, user_input_ko, message_ko, is_required_summary = conversation_manager.chat(user_input)
     
@@ -67,9 +88,18 @@ def chat_to_tts_server(user_input: str):
 
     return message_jp
 
-def chat_to_tts_server_with_screenshot():
-    message_jp, face, motion, user_input_ko, message_ko = conversation_manager.chat_with_screenshot()
+def chat_to_tts_server_with_screenshot(user_input: str = ""):
+    global last_request_chat_time
+    global is_suggest_random_topic
+
+    if user_input:
+        print(f"user(contain screenshot): {user_input}")
+
+    message_jp, face, motion, user_input_ko, message_ko = conversation_manager.chat_with_screenshot(user_input)
     send_to_tts_server(message_jp, face, motion, user_input_ko, message_ko)
+    
+    last_request_chat_time = time.time()
+    is_suggest_random_topic = False
 
 def send_to_tts_server(message: str, face: str, motion: str, log_user: str, log_answer: str):
     print(f"send message: {message}")
